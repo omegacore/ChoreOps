@@ -12,7 +12,9 @@
  * synthesized with the Web Audio API, icons use HA's built-in <ha-icon>.
  *
  * Per-device settings (persisted in localStorage):
- *   URL params      ?choreops_fx=on|quiet|off   ?choreops_fx_users=Name1,Name2
+ *   URL params      ?choreops_fx=on|quiet|off|everywhere   ?choreops_fx_users=Name1,Name2
+ *   Effects show only on dashboards that display ChoreOps chores unless
+ *   ?choreops_fx=everywhere (or configure({ everywhere: true })) is set.
  *   Browser console ChoreOpsCelebrations.configure({ volume: 0.5 })
  *                   ChoreOpsCelebrations.demo('claim' | 'approve' | 'finale')
  */
@@ -43,7 +45,14 @@
   /* Settings                                                            */
   /* ------------------------------------------------------------------ */
   const STORE_KEY = "choreops_celebrations";
-  const DEFAULTS = { enabled: true, sound: true, volume: 0.7, intensity: 1, users: [] };
+  const DEFAULTS = {
+    enabled: true,
+    sound: true,
+    volume: 0.7,
+    intensity: 1,
+    users: [],
+    everywhere: false, // false: only on dashboards that show ChoreOps chores
+  };
 
   const loadSettings = () => {
     let stored = {};
@@ -74,6 +83,9 @@
       } else if (mode === "on") {
         settings.enabled = true;
         settings.sound = true;
+      } else if (mode === "everywhere") {
+        settings.enabled = true;
+        settings.everywhere = true;
       }
       saveSettings(settings);
     }
@@ -960,6 +972,43 @@
   const pendingClaims = new Map();
   const lastFinale = new Map();
 
+  /*
+   * Only celebrate on chore dashboards (where kids actually tap chores), not on
+   * e.g. the main Home dashboard of whoever else has HA open. A page counts
+   * when it is a ChoreOps-generated dashboard (url "cod-…") or any dashboard
+   * whose config shows ChoreOps entities. `everywhere: true` disables the gate.
+   */
+  const dashboardCache = new Map(); // url_path -> true | false | "pending"
+  const currentDashboard = () => {
+    const seg = window.location.pathname.split("/").filter(Boolean)[0] || "";
+    return seg;
+  };
+  const lookupDashboard = (urlPath) => {
+    if (dashboardCache.has(urlPath)) return;
+    if (urlPath.startsWith("cod-")) {
+      dashboardCache.set(urlPath, true);
+      return;
+    }
+    const ha = haRoot();
+    const hass = ha && ha.hass;
+    const panel = hass && hass.panels && hass.panels[urlPath];
+    if (!panel || panel.component_name !== "lovelace") {
+      dashboardCache.set(urlPath, false);
+      return;
+    }
+    dashboardCache.set(urlPath, "pending");
+    hass
+      .callWS({ type: "lovelace/config", url_path: urlPath === "lovelace" ? null : urlPath })
+      .then((cfg) => dashboardCache.set(urlPath, /choreops/i.test(JSON.stringify(cfg))))
+      .catch(() => dashboardCache.set(urlPath, false));
+  };
+  const onChoreDashboard = () => {
+    if (settings.everywhere) return true;
+    const urlPath = currentDashboard();
+    lookupDashboard(urlPath);
+    return dashboardCache.get(urlPath) === true;
+  };
+
   const userAllowed = (user) =>
     !settings.users.length ||
     settings.users.some((u) => u.toLowerCase() === String(user || "").toLowerCase());
@@ -997,7 +1046,7 @@
     if (!data || !data.new_state || !data.old_state) return;
     const next = data.new_state;
     if (!next.attributes || next.attributes.purpose !== PURPOSE_CHORE_STATUS) return;
-    if (!settings.enabled) return;
+    if (!settings.enabled || !onChoreDashboard()) return;
     const from = data.old_state.state;
     const to = next.state;
     if (from === to) return;
@@ -1022,24 +1071,50 @@
     }
   };
 
-  let subscribed = false;
-  const connect = async () => {
-    if (subscribed) return;
+  /*
+   * Watch the same entity states the dashboard renders from. The frontend
+   * replaces `hass` (and `hass.states`) on every update, so diffing the chore
+   * status entities on each new object catches every claim/approval, for any
+   * user (non-admin kiosk accounts can't subscribe to raw state_changed).
+   */
+  let lastStates = null;
+  let tracked = new Map(); // entity_id -> last seen state object
+  let lastScan = 0;
+
+  const rescan = (states) => {
+    const next = new Map();
+    for (const id in states) {
+      const s = states[id];
+      if (s && s.attributes && s.attributes.purpose === PURPOSE_CHORE_STATUS) {
+        next.set(id, tracked.get(id) || s);
+      }
+    }
+    tracked = next;
+    lastScan = Date.now();
+  };
+
+  const watch = () => {
     const ha = haRoot();
-    const hass = ha && ha.hass;
-    if (!hass || !hass.connection) {
-      setTimeout(connect, 1000);
-      return;
+    const states = ha && ha.hass && ha.hass.states;
+    if (states && states !== lastStates) {
+      const first = lastStates === null;
+      lastStates = states;
+      if (first || Date.now() - lastScan > 15000) rescan(states);
+      lookupDashboard(currentDashboard()); // warm the cache before taps happen
+      for (const [id, prev] of tracked) {
+        const cur = states[id];
+        if (!cur || cur === prev) continue;
+        tracked.set(id, cur);
+        if (!first && cur.state !== prev.state) {
+          onStateChanged({ data: { entity_id: id, old_state: prev, new_state: cur } });
+        }
+      }
     }
-    subscribed = true;
-    try {
-      // home-assistant-js-websocket re-subscribes automatically after reconnects.
-      await hass.connection.subscribeEvents(onStateChanged, "state_changed");
-    } catch (err) {
-      subscribed = false;
-      console.warn("[ChoreOps Celebrations] could not subscribe, retrying", err);
-      setTimeout(connect, 5000);
-    }
+  };
+
+  const connect = () => {
+    setInterval(watch, 250);
+    watch();
   };
 
   /* ------------------------------------------------------------------ */
@@ -1071,6 +1146,7 @@
       else enqueue("approve", name, info);
     },
     _handleStateChanged: onStateChanged,
+    _watch: watch,
   };
 
   console.info(
