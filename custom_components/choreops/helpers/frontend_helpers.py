@@ -66,7 +66,12 @@ async def async_register_frontend(hass: HomeAssistant) -> bool:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(const.FRONTEND_URL_BASE, str(FRONTEND_DIR), True)]
     )
-    add_extra_js_url(hass, get_celebrations_url(fingerprint))
+    url = get_celebrations_url(fingerprint)
+    # Modern build loads it as a module; browsers HA serves its legacy build to
+    # (e.g. an older Chromium on a wall kiosk) only load the es5 list. The
+    # script is a self-guarding IIFE, so it runs fine as a classic script too.
+    add_extra_js_url(hass, url)
+    add_extra_js_url(hass, url, es5=True)
     hass.data[const.RUNTIME_KEY_FRONTEND_REGISTERED] = True
     const.LOGGER.debug("Registered ChoreOps celebrations frontend module")
     return True
