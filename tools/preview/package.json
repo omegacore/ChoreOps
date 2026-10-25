@@ -1,0 +1,11 @@
+{
+  "name": "choreops-celebrations-preview",
+  "private": true,
+  "description": "Builds a standalone page that runs the real celebrations module against a fake HA kiosk",
+  "scripts": {
+    "build": "node build.js ../../custom_components/choreops/frontend/choreops-celebrations.js preview.html"
+  },
+  "dependencies": {
+    "@mdi/js": "^7.4.47"
+  }
+}

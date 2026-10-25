@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chore Celebrations</title>
+<style>
+  :root {
+    --bg: #f2f0f7; --card: #ffffff; --ink: #1d1b26; --muted: #6b6878; --line: #e3e0ec;
+    --primary: #03a9f4; --success: #2e9e5b; --due: #ff9800; --claim: #a957fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121117; --card: #1f1d27; --ink: #f1eff7; --muted: #a29fb0; --line: #34313f;
+    }
+  }
+  :root[data-theme="dark"] { --bg: #121117; --card: #1f1d27; --ink: #f1eff7; --muted: #a29fb0; --line: #34313f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 18px 16px 6px; max-width: 760px; margin: 0 auto; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 24px; font-weight: 900; }
+  .points { display: inline-flex; align-items: center; gap: 6px; font-weight: 900; font-size: 18px;
+    background: #FFD60A; color: #5a2a00; padding: 6px 14px; border-radius: 999px; box-shadow: 0 3px 0 #e0a800; }
+  .points ha-icon { --mdc-icon-size: 20px; }
+  .hint { max-width: 760px; margin: 0 auto; padding: 0 16px; color: var(--muted); font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+    padding: 14px 16px 8px; max-width: 760px; margin: 0 auto; }
+  .chore { position: relative; background: var(--card); border: 4px solid var(--primary); border-radius: 22px;
+    padding: 12px 10px 12px; text-align: center; cursor: pointer; user-select: none;
+    transition: transform .12s ease; font: inherit; color: inherit; }
+  .chore:active { transform: scale(.96); }
+  .chore[data-state="due"] { border-color: var(--due); }
+  .chore[data-state="claimed"] { border-color: var(--claim); background: color-mix(in srgb, var(--claim) 10%, var(--card)); }
+  .chore[data-state="approved"] { border-color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--card)); }
+  .chore .ic { --mdc-icon-size: 52px; color: var(--primary); display: block; margin: 2px auto 6px; width: 52px; }
+  .chore[data-state="due"] .ic { color: var(--due); }
+  .chore[data-state="claimed"] .ic { color: var(--claim); }
+  .chore[data-state="approved"] .ic { color: var(--success); }
+  .chore .nm { font-weight: 800; font-size: 15px; }
+  .chore .pt { color: #d08a00; font-weight: 800; font-size: 13px; margin-top: 3px; }
+  .chore .st { color: var(--muted); font-weight: 800; font-size: 11px; letter-spacing: .6px; margin-top: 4px; }
+  .chore .tick { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+    display: none; place-items: center; color: #fff; }
+  .chore[data-state="claimed"] .tick { display: grid; background: var(--claim); }
+  .chore[data-state="approved"] .tick { display: grid; background: var(--success); }
+  .tick ha-icon { --mdc-icon-size: 16px; }
+  .controls { max-width: 760px; margin: 6px auto 30px; padding: 0 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .controls button { font: inherit; font-weight: 800; font-size: 14px; border-radius: 999px; padding: 10px 16px;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+  .controls button.primary { background: var(--claim); color: #fff; border-color: transparent; }
+  .controls ha-icon { --mdc-icon-size: 18px; }
+  ha-icon { display: inline-flex; width: var(--mdc-icon-size, 24px); height: var(--mdc-icon-size, 24px); }
+  ha-icon svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+</style>
+</head>
+<body>
+<home-assistant></home-assistant>
+<header>
+  <h1>Superstar's chores</h1>
+  <span class="points"><ha-icon icon="mdi:star"></ha-icon><span id="pts">40</span> Stars</span>
+</header>
+<p class="hint">Tap a chore to claim it, tap again to approve it as the grown-up. Finish them all for the finale. Turn your sound on.</p>
+<div class="grid" id="grid"></div>
+<div class="controls">
+  <button class="primary" data-demo="approve"><ha-icon icon="mdi:party-popper"></ha-icon>Approve demo</button>
+  <button data-demo="claim"><ha-icon icon="mdi:check-bold"></ha-icon>Claim demo</button>
+  <button data-demo="finale"><ha-icon icon="mdi:trophy-variant"></ha-icon>Finale demo</button>
+  <button id="reset"><ha-icon icon="mdi:creation"></ha-icon>Reset chores</button>
+  <button id="mute"><ha-icon icon="mdi:volume-high"></ha-icon><span>Sound on</span></button>
+</div>
+
+<script>
+/*__ICON_PATHS__*/
+customElements.define("ha-icon", class extends HTMLElement {
+  static get observedAttributes() { return ["icon"]; }
+  // Like HA's real ha-icon: renders in its own shadow root, sized by --mdc-icon-size.
+  connectedCallback() { this.render(); }
+  attributeChangedCallback() { this.render(); }
+  render() {
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const d = ICON_PATHS[this.getAttribute("icon")] || ICON_PATHS["mdi:star"];
+    this.shadowRoot.innerHTML = `<style>:host{display:inline-flex;align-items:center;justify-content:center;
+      width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px)}svg{width:100%;height:100%;fill:currentColor;display:block}</style>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"></path></svg>`;
+  }
+});
+
+/* Minimal stand-in for Home Assistant: <home-assistant>.hass with states + websocket. */
+const CHORES = [
+  ["make_the_bed", "Make the bed", "mdi:bed", 10],
+  ["feed_the_dog", "Feed the dog", "mdi:dog", 5],
+  ["set_the_table", "Set the table", "mdi:silverware-fork-knife", 5],
+  ["brush_teeth", "Brush teeth", "mdi:toothbrush", 2],
+  ["laundry", "Put away laundry", "mdi:basket", 15],
+  ["trash", "Take out trash", "mdi:trash-can", 8],
+];
+const USER = "Superstar";
+const states = {};
+const listeners = [];
+const freshStates = () => {
+  CHORES.forEach(([key, name, icon, points], i) => {
+    const id = `sensor.superstar_chore_status_${key}`;
+    states[id] = { entity_id: id, state: i === 1 ? "due" : "pending", attributes: {
+      purpose: "purpose_chore_status", user_name: USER, chore_name: name, icon,
+      default_points: points, chore_current_streak: (i % 3) + 1 } };
+  });
+  states["sensor.superstar_points"] = { entity_id: "sensor.superstar_points", state: "40",
+    attributes: { purpose: "purpose_points", user_name: USER, unit_of_measurement: "Stars", icon: "mdi:star" } };
+};
+freshStates();
+document.querySelector("home-assistant").hass = {
+  states,
+  connection: { subscribeEvents(cb, type) { if (type === "state_changed") listeners.push(cb); return Promise.resolve(() => {}); } },
+};
+window.setChoreState = (id, next) => {
+  const old = states[id];
+  const updated = { ...old, state: next, attributes: { ...old.attributes } };
+  if (next === "approved") {
+    updated.attributes.chore_current_streak = (old.attributes.chore_current_streak || 0) + 1;
+    const p = states["sensor.superstar_points"];
+    p.state = String(Number(p.state) + Number(old.attributes.default_points));
+  }
+  states[id] = updated;
+  const ha = document.querySelector("home-assistant");
+  ha.hass = { ...ha.hass, states: { ...states } }; // the real frontend swaps hass on every update
+  listeners.forEach((cb) => cb({ event_type: "state_changed", data: { entity_id: id, old_state: old, new_state: updated } }));
+  render();
+};
+
+const LABEL = { pending: "TO DO", due: "DUE NOW", claimed: "WAITING FOR APPROVAL", approved: "DONE!" };
+function render() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  for (const id of Object.keys(states)) {
+    const s = states[id];
+    if (s.attributes.purpose !== "purpose_chore_status") continue;
+    const el = document.createElement("button");
+    el.className = "chore";
+    el.dataset.state = s.state;
+    el.dataset.entity = id;
+    el.innerHTML = `<span class="tick"><ha-icon icon="${s.state === "approved" ? "mdi:check-all" : "mdi:check"}"></ha-icon></span>
+      <ha-icon class="ic" icon="${s.attributes.icon}"></ha-icon>
+      <div class="nm">${s.attributes.chore_name}</div>
+      <div class="pt">${s.attributes.default_points} Stars</div>
+      <div class="st">${LABEL[s.state] || s.state.toUpperCase()}</div>`;
+    el.addEventListener("click", () => {
+      if (s.state === "pending" || s.state === "due") setChoreState(id, "claimed");
+      else if (s.state === "claimed") setChoreState(id, "approved");
+    });
+    grid.appendChild(el);
+  }
+  document.getElementById("pts").textContent = states["sensor.superstar_points"].state;
+}
+render();
+</script>
+<script>
+try { localStorage.setItem("choreops_celebrations", JSON.stringify({ everywhere: true })); } catch (e) {}
+/*__CELEBRATIONS_MODULE__*/
+</script>
+<script>
+document.querySelectorAll("[data-demo]").forEach((b) =>
+  b.addEventListener("click", () => ChoreOpsCelebrations.demo(b.dataset.demo, "Superstar")));
+document.getElementById("reset").addEventListener("click", () => { freshStates(); render(); });
+const muteBtn = document.getElementById("mute");
+const syncMute = () => {
+  const on = ChoreOpsCelebrations.settings().sound;
+  muteBtn.querySelector("ha-icon").setAttribute("icon", on ? "mdi:volume-high" : "mdi:volume-off");
+  muteBtn.querySelector("span").textContent = on ? "Sound on" : "Sound off";
+};
+muteBtn.addEventListener("click", () => {
+  ChoreOpsCelebrations.configure({ sound: !ChoreOpsCelebrations.settings().sound });
+  syncMute();
+});
+syncMute();
+</script>
+</body>
+</html>
