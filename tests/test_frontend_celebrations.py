@@ -57,8 +57,10 @@ async def test_register_frontend_serves_and_injects_module(
     assert configs[0].url_path == const.FRONTEND_URL_BASE
     assert Path(configs[0].path) == fh.FRONTEND_DIR
 
-    add_js.assert_called_once()
-    url = add_js.call_args.args[1]
+    assert add_js.call_count == 2  # modern module list + legacy (es5) list
+    url = add_js.call_args_list[0].args[1]
+    assert add_js.call_args_list[1].args[1] == url
+    assert add_js.call_args_list[1].kwargs == {"es5": True}
     assert url.startswith(
         f"{const.FRONTEND_URL_BASE}/{const.FRONTEND_CELEBRATIONS_FILENAME}?v="
     )

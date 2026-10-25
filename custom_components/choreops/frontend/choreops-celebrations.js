@@ -22,7 +22,7 @@
   "use strict";
   if (window.ChoreOpsCelebrations) return;
 
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
   const PURPOSE_CHORE_STATUS = "purpose_chore_status";
   const CLAIMED = new Set(["claimed", "claimed_in_part"]);
   const DONE = new Set([
@@ -200,6 +200,11 @@
     };
 
     return {
+      status() {
+        if (!settings.sound) return "off";
+        if (!ctx || ctx.state !== "running") return "waiting for first tap";
+        return "ready";
+      },
       claim() {
         const c = ready();
         if (!c) return;
@@ -1112,9 +1117,45 @@
     }
   };
 
+  /* ?choreops_fx_debug=1 shows a status badge: handy on kiosks with no devtools */
+  const debugBadge = () => {
+    let wanted = false;
+    try {
+      wanted = new URLSearchParams(window.location.search).has("choreops_fx_debug");
+    } catch (_err) {
+      wanted = false;
+    }
+    if (!wanted) return;
+    const el = document.createElement("div");
+    Object.assign(el.style, {
+      position: "fixed", left: "12px", bottom: "12px", zIndex: "2147483647", maxWidth: "92vw",
+      padding: "10px 14px", borderRadius: "14px", background: "#2B2140", color: "#fff",
+      font: "600 13px/1.45 system-ui, sans-serif", boxShadow: "0 6px 24px rgba(0,0,0,.35)",
+      pointerEvents: "none", whiteSpace: "pre",
+    });
+    document.body.appendChild(el);
+    const render = () => {
+      const urlPath = currentDashboard();
+      lookupDashboard(urlPath);
+      const dash = settings.everywhere ? "everywhere" : String(dashboardCache.get(urlPath));
+      el.textContent =
+        `ChoreOps Celebrations ${VERSION} loaded\n` +
+        `page "${urlPath}" chore dashboard: ${dash}\n` +
+        `watching ${tracked.size} chores | effects ${settings.enabled ? "on" : "off"}\n` +
+        `sound: ${Sound.status()}`;
+    };
+    render();
+    const timer = setInterval(render, 1000);
+    setTimeout(() => {
+      clearInterval(timer);
+      el.remove();
+    }, 20000);
+  };
+
   const connect = () => {
     setInterval(watch, 250);
     watch();
+    setTimeout(debugBadge, 1500);
   };
 
   /* ------------------------------------------------------------------ */
