@@ -21,6 +21,7 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from . import const
 from .coordinator import ChoreOpsConfigEntry, ChoreOpsDataCoordinator
 from .helpers import backup_helpers as bh, dashboard_helpers as dh
+from .helpers.frontend_helpers import async_register_frontend
 from .helpers.storage_helpers import get_entry_storage_key_from_entry
 from .notification_action_handler import async_handle_notification_action
 from .services import async_setup_services, async_unload_services
@@ -101,6 +102,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChoreOpsConfigEntry) -> 
     # Prime dashboard manifest definitions from disk in executor so
     # options/config flows can resolve template defaults without blocking.
     await dh.async_prime_manifest_template_definitions(hass)
+
+    # Serve + auto-load the chore celebration effects (confetti/sparkles/sfx).
+    # Cosmetic only: never let a frontend hiccup block integration setup.
+    try:
+        await async_register_frontend(hass)
+    except Exception:
+        const.LOGGER.warning(
+            "Could not register ChoreOps celebrations frontend", exc_info=True
+        )
 
     # Initialize entry-scoped storage manager to ensure multi-entry isolation.
     scoped_storage_key = get_entry_storage_key_from_entry(entry)

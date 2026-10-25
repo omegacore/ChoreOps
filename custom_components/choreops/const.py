@@ -79,6 +79,12 @@ ENTRY_DATA_PENDING_STORAGE_KEY: Final = "pending_storage_key"
 RUNTIME_KEY_STARTUP_BACKUP_CREATED: Final = "_startup_backup_created_"
 RUNTIME_KEY_ENTITY_CLEANUP_DONE: Final = "_entity_cleanup_done_"
 RUNTIME_KEY_SERVICE_REGISTRATION_COUNT: Final = "_service_registration_count_"
+RUNTIME_KEY_FRONTEND_REGISTERED: Final = "_choreops_frontend_registered_"
+
+# Frontend modules served by the integration (celebration effects)
+FRONTEND_DIRECTORY: Final = "frontend"
+FRONTEND_URL_BASE: Final = f"/{DOMAIN}_frontend"
+FRONTEND_CELEBRATIONS_FILENAME: Final = "choreops-celebrations.js"
 
 # Documentation URLs (injected via description_placeholders to satisfy hassfest)
 DOC_URL_QUICK_START: Final = (
